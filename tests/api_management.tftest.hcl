@@ -321,3 +321,94 @@ run "deny_policy" {
     error_message = "Only the Terraform service accounts, the API keys manager and the declared accessors must read the secrets."
   }
 }
+
+run "no_perimeter" {
+  assert {
+    condition = (
+      length(google_access_context_manager_service_perimeter_ingress_policy.rules) == 0 &&
+      length(google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules) == 0
+    )
+    error_message = "No ingress rule must be added without a perimeter."
+  }
+}
+
+run "perimeter_dry_run" {
+  variables {
+    vpc_service_controls = {
+      perimeter_name = "accessPolicies/555555555555/servicePerimeters/cloud_foundations_production"
+    }
+  }
+
+  assert {
+    condition = (
+      length(google_access_context_manager_service_perimeter_ingress_policy.rules) == 0 &&
+      toset(keys(google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules)) == toset([
+        "API keys accessors impersonating the API keys manager",
+        "API keys manager reading the development secrets",
+      ])
+    )
+    error_message = "Only the dry-run configuration must get the rules, without the secrets accessors' rule when there are none."
+  }
+
+  assert {
+    condition = (
+      google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules["API keys accessors impersonating the API keys manager"].ingress_from[0].identities == tolist(["group:gcp-api-keys-accessors@example.com"]) &&
+      google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules["API keys accessors impersonating the API keys manager"].ingress_to[0].operations[0].service_name == "iamcredentials.googleapis.com" &&
+      google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules["API keys accessors impersonating the API keys manager"].ingress_to[0].resources == tolist(["projects/333333333333"]) &&
+      google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules["API keys manager reading the development secrets"].ingress_from[0].identities == tolist(["serviceAccount:cmn-api-manager@cmn-api-management-hub-c3d4.iam.gserviceaccount.com"]) &&
+      google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules["API keys manager reading the development secrets"].ingress_to[0].operations[0].service_name == "secretmanager.googleapis.com"
+    )
+    error_message = "The accessors group must impersonate the API keys manager, which reads the secrets, into the hub only."
+  }
+}
+
+run "perimeter_enforced" {
+  variables {
+    vpc_service_controls = {
+      perimeter_name = "accessPolicies/555555555555/servicePerimeters/cloud_foundations_production"
+      mode           = "enforced"
+    }
+    gemini_api_keys = {
+      chatbot = {
+        environment_name                 = "development"
+        labels                           = { department = "engineering", owner = "team" }
+        accessor_service_accounts_emails = ["chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
+      }
+    }
+    api_keys_secrets = {
+      maps_api = {
+        environment_name                 = "development"
+        labels                           = { department = "engineering", owner = "team" }
+        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data_version    = 1
+        accessor_service_accounts_emails = ["maps@dev-maps-a1b2.iam.gserviceaccount.com", "chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      keys(google_access_context_manager_service_perimeter_ingress_policy.rules) == keys(google_access_context_manager_service_perimeter_dry_run_ingress_policy.rules) &&
+      length(google_access_context_manager_service_perimeter_ingress_policy.rules) == 3 &&
+      google_access_context_manager_service_perimeter_ingress_policy.rules["API keys secrets accessors"].ingress_from[0].identities == tolist([
+        "serviceAccount:chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com",
+        "serviceAccount:maps@dev-maps-a1b2.iam.gserviceaccount.com",
+      ]) &&
+      google_access_context_manager_service_perimeter_ingress_policy.rules["API keys secrets accessors"].ingress_to[0].operations[0].service_name == "secretmanager.googleapis.com"
+    )
+    error_message = "Both configurations must get the rules when enforced, with each secrets accessor once."
+  }
+}
+
+run "invalid_perimeter" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      perimeter_name = "cloud_foundations_production"
+      mode           = "strict"
+    }
+  }
+
+  expect_failures = [var.vpc_service_controls]
+}

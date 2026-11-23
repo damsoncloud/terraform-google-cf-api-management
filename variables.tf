@@ -188,3 +188,22 @@ variable "api_keys_secrets" {
     error_message = "Label keys must be 1-63 and values 0-63 lowercase letters, digits, underscores or hyphens, keys starting with a letter, e.g. `team_at_example_com` for an email."
   }
 }
+
+variable "vpc_service_controls" {
+  description = "The VPC Service Controls perimeter around the hub project, to which the ingress rules of the API keys' accessors from outside it are added; not added when null: `perimeter_name`, the perimeter's resource name, e.g. the `perimeter_name` output of cf-organization's vpc-service-controls submodule; `mode`, the submodule's mode: the rules are added to the dry-run configuration, and to the enforced one too when `enforced`."
+  type = object({
+    perimeter_name = string
+    mode           = optional(string, "dry_run")
+  })
+  default = null
+
+  validation {
+    condition     = var.vpc_service_controls == null || can(regex("^accessPolicies/[0-9]+/servicePerimeters/[A-Za-z0-9_]+$", var.vpc_service_controls.perimeter_name))
+    error_message = "The perimeter_name must be `accessPolicies/<id>/servicePerimeters/<name>`."
+  }
+
+  validation {
+    condition     = var.vpc_service_controls == null || contains(["dry_run", "enforced"], try(var.vpc_service_controls.mode, ""))
+    error_message = "The mode must be dry_run or enforced."
+  }
+}

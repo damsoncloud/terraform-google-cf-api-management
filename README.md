@@ -9,7 +9,9 @@ Terraform module of the Damson Cloud GCP Cloud Foundations managing the API keys
 * the secrets of the other API keys, with values encrypted with the KMS key in the configuration, decrypted by `tf-bootstrap` when writing them,
 * a deny policy on the hub project, letting only `tf-bootstrap` manage the API keys and the secrets, only `tf-bootstrap` and `tf-plan` read the key strings, and only them,
   the API keys manager and the declared service accounts read the secrets,
-* the secret access of `tf-plan`, which reads the key strings, the secrets and the decrypted values when planning.
+* the secret access of `tf-plan`, which reads the key strings, the secrets and the decrypted values when planning,
+* when the hub project is in a VPC Service Controls perimeter, the ingress rules letting the API keys' accessors group impersonate the API keys manager, and the API keys
+  manager and the declared service accounts read the secrets from outside the perimeter.
 
 ## Usage
 
@@ -25,6 +27,11 @@ module "api_management" {
   api_management_project_id = module.organization.api_management_project_id
   tf_bootstrap_email        = module.bootstrap.tf_bootstrap_email
   tf_plan_email             = module.bootstrap.tf_plan_email
+
+  vpc_service_controls = {
+    perimeter_name = module.vpc_service_controls.perimeter_name
+    mode           = "enforced"
+  }
 
   gemini_api_keys = {
     chatbot = {
@@ -80,6 +87,7 @@ value is written as a new secret version only when its `encrypted_secret_data_ve
 | sres\_group\_suffix | Suffix of the common environment's SREs group (`gcp-<common short name>-<suffix>`), encrypting the values of the API keys' secrets. | `string` | `"sres"` | no |
 | tf\_bootstrap\_email | Email of the `tf-bootstrap` service account applying the module, e.g. the `tf_bootstrap_email` output of cf-bootstrap, decrypting the KMS-encrypted values of the API keys' secrets. | `string` | n/a | yes |
 | tf\_plan\_email | Email of the `tf-plan` service account planning the module, e.g. the `tf_plan_email` output of cf-bootstrap, decrypting the KMS-encrypted values and reading the API keys' key strings and secrets when planning. | `string` | n/a | yes |
+| vpc\_service\_controls | The VPC Service Controls perimeter around the hub project, to which the ingress rules of the API keys' accessors from outside it are added; not added when null: `perimeter_name`, the perimeter's resource name, e.g. the `perimeter_name` output of cf-organization's vpc-service-controls submodule; `mode`, the submodule's mode: the rules are added to the dry-run configuration, and to the enforced one too when `enforced`. | ```object({ perimeter_name = string mode = optional(string, "dry_run") })``` | `null` | no |
 
 ## Outputs
 
