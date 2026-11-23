@@ -17,3 +17,8 @@ output "gemini_api_keys" {
   description = "IDs of the Gemini API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose."
   value       = { for purpose, secret in google_secret_manager_regional_secret.gemini_api : purpose => secret.id }
 }
+
+output "api_keys_secrets" {
+  description = "IDs of the other API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose."
+  value       = { for purpose, secret in google_secret_manager_regional_secret.api_key : purpose => secret.id }
+}

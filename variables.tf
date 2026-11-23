@@ -131,3 +131,55 @@ variable "gemini_api_keys" {
     error_message = "Label keys must be 1-63 and values 0-63 lowercase letters, digits, underscores or hyphens, keys starting with a letter, e.g. `team_at_example_com` for an email."
   }
 }
+
+variable "api_keys_secrets" {
+  description = <<-EOT
+  Secrets of the API keys other than Gemini's, by purpose, each in a regional secret named `<environment short name>-<region>-<purpose>` and tagged with its environment.
+  Each secret has:
+  `environment_name`, the folder name of its environment;
+  `labels` of the secret, as those of `gemini_api_keys`;
+  `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README;
+  `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored;
+  `accessor_service_accounts_emails`, the service accounts reading the secret.
+  tf-bootstrap decrypts the values when writing them, so the base64-encoded values are stored in the Terraform state.
+  EOT
+  type = map(object({
+    environment_name                 = string
+    labels                           = map(string)
+    encrypted_secret_data            = string
+    encrypted_secret_data_version    = number
+    accessor_service_accounts_emails = optional(set(string), [])
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for secret in values(var.api_keys_secrets) : contains([for name, folder in var.folders : name if folder.short_name != null], secret.environment_name)])
+    error_message = "The environment_name of each API key secret must be an environment of `folders`."
+  }
+
+  validation {
+    condition = alltrue([for purpose, secret in var.api_keys_secrets :
+      can(regex("^[a-zA-Z0-9_-]+$", purpose)) && !startswith(purpose, "geminiapi-") &&
+      length("${try(var.folders[secret.environment_name].short_name, "")}-${var.region}-${purpose}") <= 255
+    ])
+    error_message = "API key secret purposes must be letters, digits, underscores or hyphens, must not start with `geminiapi-`, and `<environment short name>-<region>-<purpose>` must not exceed 255 characters."
+  }
+
+  validation {
+    condition     = alltrue([for secret in values(var.api_keys_secrets) : can(base64decode(secret.encrypted_secret_data)) && secret.encrypted_secret_data_version >= 1])
+    error_message = "The encrypted_secret_data must be base64-encoded and the encrypted_secret_data_version at least 1."
+  }
+
+  validation {
+    condition     = alltrue([for secret in values(var.api_keys_secrets) : contains(keys(secret.labels), "department") && contains(keys(secret.labels), "owner")])
+    error_message = "The labels of each API key secret must include department and owner."
+  }
+
+  validation {
+    condition = alltrue(flatten([for secret in values(var.api_keys_secrets) : [for name, value in secret.labels :
+      can(regex("^[\\p{Ll}\\p{Lo}][\\p{Ll}\\p{Lo}\\p{N}_-]{0,62}$", name)) && can(regex("^[\\p{Ll}\\p{Lo}\\p{N}_-]{0,63}$", value))
+    ]]))
+    error_message = "Label keys must be 1-63 and values 0-63 lowercase letters, digits, underscores or hyphens, keys starting with a letter, e.g. `team_at_example_com` for an email."
+  }
+}

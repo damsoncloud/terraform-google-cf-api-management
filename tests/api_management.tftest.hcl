@@ -5,6 +5,12 @@ mock_provider "google" {
     }
   }
 
+  mock_data "google_kms_secret" {
+    defaults = {
+      plaintext = "dmFsdWU="
+    }
+  }
+
   mock_data "google_iam_policy" {
     defaults = {
       policy_data = "{}"
@@ -197,4 +203,64 @@ run "gemini_api_key_name_too_long" {
   }
 
   expect_failures = [var.gemini_api_keys]
+}
+
+run "api_keys_secrets" {
+  variables {
+    api_keys_secrets = {
+      maps_api = {
+        environment_name                 = "certification"
+        labels                           = { department = "engineering", owner = "team_at_example_com" }
+        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data_version    = 2
+        accessor_service_accounts_emails = ["maps@cert-maps-a1b2.iam.gserviceaccount.com"]
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      data.google_kms_secret.api_key["maps_api"].crypto_key == google_kms_crypto_key.api_management.id &&
+      data.google_kms_secret.api_key["maps_api"].ciphertext == "Y2lwaGVydGV4dA==" &&
+      google_secret_manager_regional_secret_version.api_key["maps_api"].secret_data_wo_version == "2"
+    )
+    error_message = "The values must be decrypted with the module's key and written as the declared version."
+  }
+
+  assert {
+    condition = (
+      google_secret_manager_regional_secret.api_key["maps_api"].secret_id == "cert-europe-west4-maps_api" &&
+      google_secret_manager_regional_secret.api_key["maps_api"].location == "europe-west4" &&
+      google_secret_manager_regional_secret.api_key["maps_api"].tags == tomap({ "tagKeys/200000000000" = "tagValues/200000000002" }) &&
+      google_secret_manager_regional_secret.api_key["maps_api"].labels == tomap({ department = "engineering", owner = "team_at_example_com", environment = "cert" }) &&
+      output.api_keys_secrets["maps_api"] == google_secret_manager_regional_secret.api_key["maps_api"].id
+    )
+    error_message = "The secrets must keep the legacy names, tagged and labelled with their environment."
+  }
+
+  assert {
+    condition = (
+      toset(keys(google_secret_manager_regional_secret_iam_member.api_key)) == toset(["maps_api/maps@cert-maps-a1b2.iam.gserviceaccount.com"]) &&
+      google_secret_manager_regional_secret_iam_member.api_key["maps_api/maps@cert-maps-a1b2.iam.gserviceaccount.com"].member == "serviceAccount:maps@cert-maps-a1b2.iam.gserviceaccount.com" &&
+      google_secret_manager_regional_secret_iam_member.api_key["maps_api/maps@cert-maps-a1b2.iam.gserviceaccount.com"].role == "roles/secretmanager.secretAccessor"
+    )
+    error_message = "Only the declared service accounts must read each secret."
+  }
+}
+
+run "invalid_api_keys_secrets" {
+  command = plan
+
+  variables {
+    api_keys_secrets = {
+      "geminiapi-chatbot" = {
+        environment_name              = "development"
+        labels                        = { department = "engineering", owner = "team" }
+        encrypted_secret_data         = "not base64!"
+        encrypted_secret_data_version = 0
+      }
+    }
+  }
+
+  expect_failures = [var.api_keys_secrets]
 }
