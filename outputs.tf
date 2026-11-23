@@ -12,3 +12,8 @@ output "gemini_api_service_accounts" {
   description = "Emails of the service accounts the Gemini API keys are bound to, by environment folder name."
   value       = { for name, account in google_service_account.gemini_api : name => account.email }
 }
+
+output "gemini_api_keys" {
+  description = "IDs of the Gemini API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose."
+  value       = { for purpose, secret in google_secret_manager_regional_secret.gemini_api : purpose => secret.id }
+}

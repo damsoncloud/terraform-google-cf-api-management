@@ -82,3 +82,52 @@ variable "api_keys_accessors_group_name" {
   default     = "gcp-api-keys-accessors"
   nullable    = false
 }
+
+variable "gemini_api_keys" {
+  description = <<-EOT
+  Gemini API keys by purpose, each restricted to the Gemini API, bound to its environment's service account and stored in a regional secret tagged with its environment.
+  The key and the secret are named `<environment short name>-<region>-geminiapi-<purpose>`. Each key has:
+  `environment_name`, the folder name of its environment;
+  `labels` of the secret, following the labelling strategy of the customer design document: at least `department` and `owner`, e.g. a team name or an email with `_at_` and `_`
+  in place of `@` and dots; the `environment` label is set to the environment's short name;
+  `display_name` of the key;
+  `accessor_service_accounts_emails`, the service accounts reading the secret;
+  `server_key_restrictions`, the IP addresses or ranges allowed to use the key.
+  EOT
+  type = map(object({
+    environment_name                 = string
+    labels                           = map(string)
+    display_name                     = optional(string)
+    accessor_service_accounts_emails = optional(set(string), [])
+    server_key_restrictions = optional(object({
+      allowed_ips = list(string)
+    }))
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for key in values(var.gemini_api_keys) : contains([for name, folder in var.folders : name if folder.short_name != null], key.environment_name)])
+    error_message = "The environment_name of each Gemini API key must be an environment of `folders`."
+  }
+
+  validation {
+    condition = alltrue([for purpose, key in var.gemini_api_keys :
+      can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", purpose)) &&
+      length("${try(var.folders[key.environment_name].short_name, "")}-${var.region}-geminiapi-${purpose}") <= 63
+    ])
+    error_message = "Gemini API key purposes must be lowercase letters, digits and hyphens, starting and ending with a letter or a digit, and `<environment short name>-<region>-geminiapi-<purpose>` must not exceed 63 characters."
+  }
+
+  validation {
+    condition     = alltrue([for key in values(var.gemini_api_keys) : contains(keys(key.labels), "department") && contains(keys(key.labels), "owner")])
+    error_message = "The labels of each Gemini API key must include department and owner."
+  }
+
+  validation {
+    condition = alltrue(flatten([for key in values(var.gemini_api_keys) : [for name, value in key.labels :
+      can(regex("^[\\p{Ll}\\p{Lo}][\\p{Ll}\\p{Lo}\\p{N}_-]{0,62}$", name)) && can(regex("^[\\p{Ll}\\p{Lo}\\p{N}_-]{0,63}$", value))
+    ]]))
+    error_message = "Label keys must be 1-63 and values 0-63 lowercase letters, digits, underscores or hyphens, keys starting with a letter, e.g. `team_at_example_com` for an email."
+  }
+}

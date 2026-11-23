@@ -114,3 +114,87 @@ run "missing_tag_values" {
 
   expect_failures = [var.environment_tag_values]
 }
+
+run "gemini_api_keys" {
+  variables {
+    gemini_api_keys = {
+      chatbot = {
+        environment_name                 = "development"
+        labels                           = { department = "engineering", owner = "team_at_example_com" }
+        accessor_service_accounts_emails = ["chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com", "ci@dev-chatbot-a1b2.iam.gserviceaccount.com"]
+      }
+      translation = {
+        environment_name        = "production"
+        labels                  = { department = "localisation", owner = "translation-team", component = "translator" }
+        display_name            = "Translation service"
+        server_key_restrictions = { allowed_ips = ["203.0.113.0/24"] }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      google_apikeys_key.gemini_api["translation"].name == "prod-europe-west4-geminiapi-translation" &&
+      google_apikeys_key.gemini_api["translation"].display_name == "Translation service" &&
+      google_apikeys_key.gemini_api["translation"].service_account_email == google_service_account.gemini_api["production"].email &&
+      google_apikeys_key.gemini_api["translation"].restrictions[0].api_targets[0].service == "generativelanguage.googleapis.com" &&
+      google_apikeys_key.gemini_api["translation"].restrictions[0].server_key_restrictions[0].allowed_ips == tolist(["203.0.113.0/24"]) &&
+      length(google_apikeys_key.gemini_api["chatbot"].restrictions[0].server_key_restrictions) == 0
+    )
+    error_message = "The keys must keep the legacy names, be restricted to the Gemini API and bound to their environment's service account."
+  }
+
+  assert {
+    condition = (
+      google_secret_manager_regional_secret.gemini_api["chatbot"].secret_id == "dev-europe-west4-geminiapi-chatbot" &&
+      google_secret_manager_regional_secret.gemini_api["chatbot"].location == "europe-west4" &&
+      google_secret_manager_regional_secret.gemini_api["chatbot"].tags == tomap({ "tagKeys/200000000000" = "tagValues/200000000001" }) &&
+      google_secret_manager_regional_secret.gemini_api["translation"].labels == tomap({ department = "localisation", owner = "translation-team", component = "translator", environment = "prod" }) &&
+      google_secret_manager_regional_secret_version.gemini_api["chatbot"].secret_data == google_apikeys_key.gemini_api["chatbot"].key_string &&
+      output.gemini_api_keys["chatbot"] == google_secret_manager_regional_secret.gemini_api["chatbot"].id
+    )
+    error_message = "The secrets must hold the key strings, tagged and labelled with their environment."
+  }
+
+  assert {
+    condition = (
+      toset(keys(google_secret_manager_regional_secret_iam_member.gemini_api)) == toset([
+        "chatbot/chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com",
+        "chatbot/ci@dev-chatbot-a1b2.iam.gserviceaccount.com",
+      ]) &&
+      google_secret_manager_regional_secret_iam_member.gemini_api["chatbot/ci@dev-chatbot-a1b2.iam.gserviceaccount.com"].member == "serviceAccount:ci@dev-chatbot-a1b2.iam.gserviceaccount.com" &&
+      google_secret_manager_regional_secret_iam_member.gemini_api["chatbot/ci@dev-chatbot-a1b2.iam.gserviceaccount.com"].role == "roles/secretmanager.secretAccessor"
+    )
+    error_message = "Only the declared service accounts must read each secret."
+  }
+}
+
+run "invalid_gemini_api_keys" {
+  command = plan
+
+  variables {
+    gemini_api_keys = {
+      Chatbot = {
+        environment_name = "legacy"
+        labels           = { owner = "Team@example.com" }
+      }
+    }
+  }
+
+  expect_failures = [var.gemini_api_keys]
+}
+
+run "gemini_api_key_name_too_long" {
+  command = plan
+
+  variables {
+    gemini_api_keys = {
+      "a-purpose-long-enough-to-exceed-the-api-key-id-limit" = {
+        environment_name = "production"
+        labels           = { department = "engineering", owner = "team" }
+      }
+    }
+  }
+
+  expect_failures = [var.gemini_api_keys]
+}
