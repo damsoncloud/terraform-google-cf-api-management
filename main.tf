@@ -7,6 +7,13 @@ locals {
   user_access_tag_name = "development"
 }
 
+# Plans read the secret versions; tf-plan's organisation roles already include apikeys.keys.getKeyString
+resource "google_project_iam_member" "tf_plan" {
+  project = google_project_service.api_management["secretmanager.googleapis.com"].project
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${var.tf_plan_email}"
+}
+
 data "google_project" "api_management" {
   project_id = var.api_management_project_id
 }

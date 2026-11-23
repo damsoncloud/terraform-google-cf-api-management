@@ -46,6 +46,7 @@ variables {
   }
   api_management_project_id = "cmn-api-management-hub-c3d4"
   tf_bootstrap_email        = "tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"
+  tf_plan_email             = "tf-plan@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"
 }
 
 run "kms" {
@@ -64,9 +65,9 @@ run "kms" {
   assert {
     condition = (
       google_kms_crypto_key_iam_binding.encrypters.members == toset(["group:gcp-cmn-sres@example.com"]) &&
-      google_kms_crypto_key_iam_binding.decrypters.members == toset(["group:gcp-cmn-sres@example.com", "serviceAccount:tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"])
+      google_kms_crypto_key_iam_binding.decrypters.members == toset(["group:gcp-cmn-sres@example.com", "serviceAccount:tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com", "serviceAccount:tf-plan@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"])
     )
-    error_message = "Only the SREs must encrypt, and only the SREs and tf-bootstrap decrypt."
+    error_message = "Only the SREs must encrypt, and only the SREs and the Terraform service accounts decrypt."
   }
 
   assert {
@@ -83,7 +84,9 @@ run "service_accounts" {
       google_project_iam_member.api_manager.role == "roles/secretmanager.secretAccessor" &&
       google_project_iam_member.api_manager.condition[0].expression == "resource.matchTagId('tagKeys/200000000000', 'tagValues/200000000001')" &&
       one(data.google_iam_policy.api_manager.binding).role == "roles/iam.serviceAccountTokenCreator" &&
-      one(data.google_iam_policy.api_manager.binding).members == toset(["group:gcp-api-keys-accessors@example.com"])
+      one(data.google_iam_policy.api_manager.binding).members == toset(["group:gcp-api-keys-accessors@example.com"]) &&
+      google_project_iam_member.tf_plan.role == "roles/secretmanager.secretAccessor" &&
+      google_project_iam_member.tf_plan.member == "serviceAccount:tf-plan@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"
     )
     error_message = "The API keys manager must read the development secrets only, impersonated by the accessors group only."
   }
@@ -263,4 +266,58 @@ run "invalid_api_keys_secrets" {
   }
 
   expect_failures = [var.api_keys_secrets]
+}
+
+run "deny_policy" {
+  variables {
+    gemini_api_keys = {
+      chatbot = {
+        environment_name                 = "development"
+        labels                           = { department = "engineering", owner = "team" }
+        accessor_service_accounts_emails = ["chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
+      }
+    }
+    api_keys_secrets = {
+      maps_api = {
+        environment_name                 = "production"
+        labels                           = { department = "engineering", owner = "team" }
+        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data_version    = 1
+        accessor_service_accounts_emails = ["maps@prod-maps-a1b2.iam.gserviceaccount.com", "chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      google_iam_deny_policy.api_management.name == "cmn-api-keys-protection" &&
+      google_iam_deny_policy.api_management.parent == "cloudresourcemanager.googleapis.com%2Fprojects%2Fcmn-api-management-hub-c3d4" &&
+      length(google_iam_deny_policy.api_management.rules) == 4 &&
+      alltrue([for rule in google_iam_deny_policy.api_management.rules : toset(rule.deny_rule[0].denied_principals) == toset(["principalSet://goog/public:all"])])
+    )
+    error_message = "The deny policy must keep the legacy name on the hub project and deny everyone else."
+  }
+
+  assert {
+    condition = (
+      toset(google_iam_deny_policy.api_management.rules[0].deny_rule[0].exception_principals) == toset(["principal://iam.googleapis.com/projects/-/serviceAccounts/tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"]) &&
+      contains(google_iam_deny_policy.api_management.rules[0].deny_rule[0].denied_permissions, "apikeys.googleapis.com/keys.update") &&
+      toset(google_iam_deny_policy.api_management.rules[1].deny_rule[0].exception_principals) == toset(["principal://iam.googleapis.com/projects/-/serviceAccounts/tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com", "principal://iam.googleapis.com/projects/-/serviceAccounts/tf-plan@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"]) &&
+      google_iam_deny_policy.api_management.rules[1].deny_rule[0].denied_permissions == tolist(["apikeys.googleapis.com/keys.getKeyString"]) &&
+      toset(google_iam_deny_policy.api_management.rules[2].deny_rule[0].exception_principals) == toset(["principal://iam.googleapis.com/projects/-/serviceAccounts/tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com"]) &&
+      contains(google_iam_deny_policy.api_management.rules[2].deny_rule[0].denied_permissions, "secretmanager.googleapis.com/secrets.setIamPolicy")
+    )
+    error_message = "Only tf-bootstrap must manage the API keys and the secrets, and only the Terraform service accounts read the key strings."
+  }
+
+  assert {
+    condition = toset(google_iam_deny_policy.api_management.rules[3].deny_rule[0].exception_principals) == toset([
+      "principal://iam.googleapis.com/projects/-/serviceAccounts/tf-bootstrap@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com",
+      "principal://iam.googleapis.com/projects/-/serviceAccounts/tf-plan@cmn-cf-bootstrap-a1b2.iam.gserviceaccount.com",
+      "principal://iam.googleapis.com/projects/-/serviceAccounts/cmn-api-manager@cmn-api-management-hub-c3d4.iam.gserviceaccount.com",
+      "principal://iam.googleapis.com/projects/-/serviceAccounts/chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com",
+      "principal://iam.googleapis.com/projects/-/serviceAccounts/maps@prod-maps-a1b2.iam.gserviceaccount.com",
+    ])
+    error_message = "Only the Terraform service accounts, the API keys manager and the declared accessors must read the secrets."
+  }
 }

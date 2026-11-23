@@ -50,6 +50,11 @@ variable "tf_bootstrap_email" {
   type        = string
 }
 
+variable "tf_plan_email" {
+  description = "Email of the `tf-plan` service account planning the module, e.g. the `tf_plan_email` output of cf-bootstrap, decrypting the KMS-encrypted values and reading the API keys' key strings and secrets when planning."
+  type        = string
+}
+
 variable "region" {
   description = "Region of the KMS key and the secrets, part of their names."
   type        = string
@@ -141,7 +146,7 @@ variable "api_keys_secrets" {
   `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README;
   `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored;
   `accessor_service_accounts_emails`, the service accounts reading the secret.
-  tf-bootstrap decrypts the values when writing them, so the base64-encoded values are stored in the Terraform state.
+  tf-bootstrap decrypts the values when writing them, and tf-plan when planning, so the base64-encoded values are stored in the Terraform state.
   EOT
   type = map(object({
     environment_name                 = string

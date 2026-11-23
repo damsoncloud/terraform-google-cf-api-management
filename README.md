@@ -2,11 +2,14 @@
 
 Terraform module of the Damson Cloud GCP Cloud Foundations managing the API keys of a Google Cloud organisation in its API Management Hub project:
 
-* the KMS key encrypting the values of the API keys' secrets, used by the common environment's SREs and decrypted by `tf-bootstrap`,
+* the KMS key encrypting the values of the API keys' secrets, used by the common environment's SREs and decrypted by `tf-bootstrap` and `tf-plan`,
 * the API keys manager service account, reading the development environment's secrets only, impersonated by the API keys' accessors group,
 * a service account per environment, tagged with it, to which the environment's Gemini API keys are bound,
 * the Gemini API keys, restricted to the Gemini API, with their key strings in regional secrets tagged with the keys' environments and readable by the declared service accounts,
-* the secrets of the other API keys, with values encrypted with the KMS key in the configuration, decrypted by `tf-bootstrap` when writing them.
+* the secrets of the other API keys, with values encrypted with the KMS key in the configuration, decrypted by `tf-bootstrap` when writing them,
+* a deny policy on the hub project, letting only `tf-bootstrap` manage the API keys and the secrets, only `tf-bootstrap` and `tf-plan` read the key strings, and only them,
+  the API keys manager and the declared service accounts read the secrets,
+* the secret access of `tf-plan`, which reads the key strings, the secrets and the decrypted values when planning.
 
 ## Usage
 
@@ -21,6 +24,7 @@ module "api_management" {
   environment_tag_values    = module.hierarchy.environment_tag_values
   api_management_project_id = module.organization.api_management_project_id
   tf_bootstrap_email        = module.bootstrap.tf_bootstrap_email
+  tf_plan_email             = module.bootstrap.tf_plan_email
 
   gemini_api_keys = {
     chatbot = {
@@ -53,8 +57,8 @@ printf %s "$(printf %s "$VALUE" | base64 -w0)" |
   base64 -w0
 ```
 
-`tf-bootstrap` decrypts the values when writing them to Secret Manager, so the base64-encoded values are stored in the Terraform state. A changed value is written as a new
-secret version only when its `encrypted_secret_data_version` is incremented.
+`tf-bootstrap` decrypts the values when writing them to Secret Manager, and `tf-plan` when planning, so the base64-encoded values are stored in the Terraform state. A changed
+value is written as a new secret version only when its `encrypted_secret_data_version` is incremented.
 
 <!-- BEGIN_TF_DOCS -->
 <!-- markdownlint-capture -->
@@ -64,7 +68,7 @@ secret version only when its `encrypted_secret_data_version` is incremented.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | api\_keys\_accessors\_group\_name | Name of the group impersonating the API keys manager service account to read the development environment's secrets, without the domain. | `string` | `"gcp-api-keys-accessors"` | no |
-| api\_keys\_secrets | Secrets of the API keys other than Gemini's, by purpose, each in a regional secret named `<environment short name>-<region>-<purpose>` and tagged with its environment. Each secret has: `environment_name`, the folder name of its environment; `labels` of the secret, as those of `gemini_api_keys`; `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README; `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored; `accessor_service_accounts_emails`, the service accounts reading the secret. tf-bootstrap decrypts the values when writing them, so the base64-encoded values are stored in the Terraform state. | ```map(object({ environment_name = string labels = map(string) encrypted_secret_data = string encrypted_secret_data_version = number accessor_service_accounts_emails = optional(set(string), []) }))``` | `{}` | no |
+| api\_keys\_secrets | Secrets of the API keys other than Gemini's, by purpose, each in a regional secret named `<environment short name>-<region>-<purpose>` and tagged with its environment. Each secret has: `environment_name`, the folder name of its environment; `labels` of the secret, as those of `gemini_api_keys`; `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README; `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored; `accessor_service_accounts_emails`, the service accounts reading the secret. tf-bootstrap decrypts the values when writing them, and tf-plan when planning, so the base64-encoded values are stored in the Terraform state. | ```map(object({ environment_name = string labels = map(string) encrypted_secret_data = string encrypted_secret_data_version = number accessor_service_accounts_emails = optional(set(string), []) }))``` | `{}` | no |
 | api\_management\_project\_id | ID of the API Management Hub project, e.g. the `api_management_project_id` output of cf-organization. | `string` | n/a | yes |
 | domain | Domain of the organisation's groups. | `string` | n/a | yes |
 | environment\_tag\_key | ID of the `environment` tag key (`tagKeys/<id>`), e.g. the `environment_tag_key` output of cf-hierarchy. | `string` | n/a | yes |
@@ -75,6 +79,7 @@ secret version only when its `encrypted_secret_data_version` is incremented.
 | region | Region of the KMS key and the secrets, part of their names. | `string` | `"europe-west4"` | no |
 | sres\_group\_suffix | Suffix of the common environment's SREs group (`gcp-<common short name>-<suffix>`), encrypting the values of the API keys' secrets. | `string` | `"sres"` | no |
 | tf\_bootstrap\_email | Email of the `tf-bootstrap` service account applying the module, e.g. the `tf_bootstrap_email` output of cf-bootstrap, decrypting the KMS-encrypted values of the API keys' secrets. | `string` | n/a | yes |
+| tf\_plan\_email | Email of the `tf-plan` service account planning the module, e.g. the `tf_plan_email` output of cf-bootstrap, decrypting the KMS-encrypted values and reading the API keys' key strings and secrets when planning. | `string` | n/a | yes |
 
 ## Outputs
 
@@ -82,6 +87,7 @@ secret version only when its `encrypted_secret_data_version` is incremented.
 | ---- | ----------- |
 | api\_keys\_secrets | IDs of the other API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose. |
 | api\_manager\_email | Email of the API keys manager service account, impersonated by the API keys' accessors. |
+| deny\_policy | ID of the deny policy protecting the API keys and secrets of the hub project. |
 | gemini\_api\_keys | IDs of the Gemini API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose. |
 | gemini\_api\_service\_accounts | Emails of the service accounts the Gemini API keys are bound to, by environment folder name. |
 | kms\_crypto\_key | ID of the KMS key encrypting the values of the API keys' secrets (`projects/<project>/locations/<region>/keyRings/<name>/cryptoKeys/<name>`), e.g. for `gcloud kms encrypt --key`. |

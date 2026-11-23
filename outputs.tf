@@ -22,3 +22,8 @@ output "api_keys_secrets" {
   description = "IDs of the other API keys' secrets (`projects/<project>/locations/<region>/secrets/<name>`), by purpose."
   value       = { for purpose, secret in google_secret_manager_regional_secret.api_key : purpose => secret.id }
 }
+
+output "deny_policy" {
+  description = "ID of the deny policy protecting the API keys and secrets of the hub project."
+  value       = google_iam_deny_policy.api_management.id
+}
