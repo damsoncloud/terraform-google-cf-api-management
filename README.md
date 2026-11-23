@@ -54,6 +54,9 @@ module "api_management" {
 
 Pin an exact version. New versions are published as immutable GitHub releases with `vX.Y.Z` tags, following [semantic versioning](https://semver.org/).
 
+See [`examples/basic`](examples/basic) for a Gemini API key with the hub created by cf-hierarchy, cf-bootstrap and cf-organization, and
+[`examples/complete`](examples/complete) for server-restricted keys, the other API keys' secrets, accessor service accounts and the perimeter's ingress rules.
+
 ### Encrypting the API keys' values
 
 The values of `api_keys_secrets` are base64-encoded before they are encrypted, and the ciphertext is base64-encoded, by a member of the common environment's SREs group:
