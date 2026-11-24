@@ -214,7 +214,7 @@ run "api_keys_secrets" {
       maps_api = {
         environment_name                 = "certification"
         labels                           = { department = "engineering", owner = "team_at_example_com" }
-        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data            = "CiQAm9Y/AQ=="
         encrypted_secret_data_version    = 2
         accessor_service_accounts_emails = ["maps@cert-maps-a1b2.iam.gserviceaccount.com"]
       }
@@ -224,7 +224,7 @@ run "api_keys_secrets" {
   assert {
     condition = (
       data.google_kms_secret.api_key["maps_api"].crypto_key == google_kms_crypto_key.api_management.id &&
-      data.google_kms_secret.api_key["maps_api"].ciphertext == "Y2lwaGVydGV4dA==" &&
+      data.google_kms_secret.api_key["maps_api"].ciphertext == "CiQAm9Y/AQ==" &&
       google_secret_manager_regional_secret_version.api_key["maps_api"].secret_data_wo_version == "2"
     )
     error_message = "The values must be decrypted with the module's key and written as the declared version."
@@ -268,6 +268,24 @@ run "invalid_api_keys_secrets" {
   expect_failures = [var.api_keys_secrets]
 }
 
+# KMS ciphertext is binary, unlike the decoded values of base64 strings of text
+run "invalid_ciphertext" {
+  command = plan
+
+  variables {
+    api_keys_secrets = {
+      maps_api = {
+        environment_name              = "development"
+        labels                        = { department = "engineering", owner = "team_at_example_com" }
+        encrypted_secret_data         = "CiQAm9Y/AQ"
+        encrypted_secret_data_version = 1
+      }
+    }
+  }
+
+  expect_failures = [var.api_keys_secrets]
+}
+
 run "deny_policy" {
   variables {
     gemini_api_keys = {
@@ -281,7 +299,7 @@ run "deny_policy" {
       maps_api = {
         environment_name                 = "production"
         labels                           = { department = "engineering", owner = "team" }
-        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data            = "CiQAm9Y/AQ=="
         encrypted_secret_data_version    = 1
         accessor_service_accounts_emails = ["maps@prod-maps-a1b2.iam.gserviceaccount.com", "chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
       }
@@ -379,7 +397,7 @@ run "perimeter_enforced" {
       maps_api = {
         environment_name                 = "development"
         labels                           = { department = "engineering", owner = "team" }
-        encrypted_secret_data            = "Y2lwaGVydGV4dA=="
+        encrypted_secret_data            = "CiQAm9Y/AQ=="
         encrypted_secret_data_version    = 1
         accessor_service_accounts_emails = ["maps@dev-maps-a1b2.iam.gserviceaccount.com", "chatbot@dev-chatbot-a1b2.iam.gserviceaccount.com"]
       }
