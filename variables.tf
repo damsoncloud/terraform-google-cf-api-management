@@ -109,8 +109,8 @@ variable "gemini_api_keys" {
   The key and the secret are named `<environment short name>-<region>-geminiapi-<purpose>`.
   Each key has:
     `environment_name`, the folder name of its environment;
-    `labels` of the secret, following the labelling strategy of the customer design document: at least `department` and `owner`,
-    e.g. a team name or an email with `_at_` and `_` in place of `@` and dots; the `environment` label is set to the environment's short name;
+    `labels` of the secret, following the labelling strategy of the customer design document, with the `environment` label set to the environment's short name:
+    at least `department` and `owner`, e.g. a team name or an email with `_at_` and `_` in place of `@` and dots;
     `display_name` of the key;
     `accessor_service_accounts_emails`, the service accounts reading the secret;
     `server_key_restrictions`, the IP addresses or ranges allowed to use the key.
