@@ -4,7 +4,13 @@ variable "domain" {
 }
 
 variable "folders" {
-  description = "The folders by folder name, e.g. the `folders` output of cf-hierarchy: `id`, the resource name (`folders/<id>`); `short_name`, the environment's short name, null for folders other than environments; `common`, whether it is the common environment. Each environment gets a Gemini API keys service account; the common environment's short name prefixes the resources' names and names its SREs group."
+  description = <<-EOT
+  The folders by folder name, e.g. the `folders` output of cf-hierarchy:
+    `id`, the resource name (`folders/<id>`);
+    `short_name`, the environment's short name, null for folders other than environments;
+    `common`, whether it is the common environment.
+  Each environment gets a Gemini API keys service account; the common environment's short name prefixes the resources' names and names its SREs group.
+  EOT
   type = map(object({
     id         = string
     short_name = optional(string)
@@ -28,7 +34,10 @@ variable "environment_tag_key" {
 }
 
 variable "environment_tag_values" {
-  description = "IDs of the `environment` tag values (`tagValues/<id>`) by folder name, e.g. the `environment_tag_values` output of cf-hierarchy. Only the secrets tagged `development` are readable by the API keys' accessors."
+  description = <<-EOT
+  IDs of the `environment` tag values (`tagValues/<id>`) by folder name, e.g. the `environment_tag_values` output of cf-hierarchy.
+  Only the secrets tagged `development` are readable by the API keys' accessors.
+  EOT
   type        = map(string)
 
   validation {
@@ -46,12 +55,18 @@ variable "api_management_project_id" {
 }
 
 variable "tf_bootstrap_email" {
-  description = "Email of the `tf-bootstrap` service account applying the module, e.g. the `tf_bootstrap_email` output of cf-bootstrap, decrypting the KMS-encrypted values of the API keys' secrets."
+  description = <<-EOT
+  Email of the `tf-bootstrap` service account applying the module, e.g. the `tf_bootstrap_email` output of cf-bootstrap,
+  decrypting the KMS-encrypted values of the API keys' secrets.
+  EOT
   type        = string
 }
 
 variable "tf_plan_email" {
-  description = "Email of the `tf-plan` service account planning the module, e.g. the `tf_plan_email` output of cf-bootstrap, decrypting the KMS-encrypted values and reading the API keys' key strings and secrets when planning."
+  description = <<-EOT
+  Email of the `tf-plan` service account planning the module, e.g. the `tf_plan_email` output of cf-bootstrap,
+  decrypting the KMS-encrypted values and reading the API keys' key strings and secrets when planning.
+  EOT
   type        = string
 }
 
@@ -91,13 +106,14 @@ variable "api_keys_accessors_group_name" {
 variable "gemini_api_keys" {
   description = <<-EOT
   Gemini API keys by purpose, each restricted to the Gemini API, bound to its environment's service account and stored in a regional secret tagged with its environment.
-  The key and the secret are named `<environment short name>-<region>-geminiapi-<purpose>`. Each key has:
-  `environment_name`, the folder name of its environment;
-  `labels` of the secret, following the labelling strategy of the customer design document: at least `department` and `owner`, e.g. a team name or an email with `_at_` and `_`
-  in place of `@` and dots; the `environment` label is set to the environment's short name;
-  `display_name` of the key;
-  `accessor_service_accounts_emails`, the service accounts reading the secret;
-  `server_key_restrictions`, the IP addresses or ranges allowed to use the key.
+  The key and the secret are named `<environment short name>-<region>-geminiapi-<purpose>`.
+  Each key has:
+    `environment_name`, the folder name of its environment;
+    `labels` of the secret, following the labelling strategy of the customer design document: at least `department` and `owner`,
+    e.g. a team name or an email with `_at_` and `_` in place of `@` and dots; the `environment` label is set to the environment's short name;
+    `display_name` of the key;
+    `accessor_service_accounts_emails`, the service accounts reading the secret;
+    `server_key_restrictions`, the IP addresses or ranges allowed to use the key.
   EOT
   type = map(object({
     environment_name                 = string
@@ -141,11 +157,11 @@ variable "api_keys_secrets" {
   description = <<-EOT
   Secrets of the API keys other than Gemini's, by purpose, each in a regional secret named `<environment short name>-<region>-<purpose>` and tagged with its environment.
   Each secret has:
-  `environment_name`, the folder name of its environment;
-  `labels` of the secret, as those of `gemini_api_keys`;
-  `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README;
-  `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored;
-  `accessor_service_accounts_emails`, the service accounts reading the secret.
+    `environment_name`, the folder name of its environment;
+    `labels` of the secret, as those of `gemini_api_keys`;
+    `encrypted_secret_data`, the base64-encoded value, encrypted with the `kms_crypto_key` and base64-encoded again, as described in the README;
+    `encrypted_secret_data_version`, incremented to write a changed value as a new secret version, as changes of the value alone are ignored;
+    `accessor_service_accounts_emails`, the service accounts reading the secret.
   tf-bootstrap decrypts the values when writing them, and tf-plan when planning, so the base64-encoded values are stored in the Terraform state.
   EOT
   type = map(object({
@@ -190,7 +206,11 @@ variable "api_keys_secrets" {
 }
 
 variable "vpc_service_controls" {
-  description = "The VPC Service Controls perimeter around the hub project, to which the ingress rules of the API keys' accessors from outside it are added; not added when null: `perimeter_name`, the perimeter's resource name, e.g. the `perimeter_name` output of cf-organization's vpc-service-controls submodule; `mode`, the submodule's mode: the rules are added to the dry-run configuration, and to the enforced one too when `enforced`."
+  description = <<-EOT
+  The VPC Service Controls perimeter around the hub project, to which the ingress rules of the API keys' accessors from outside it are added; not added when null:
+    `perimeter_name`, the perimeter's resource name, e.g. the `perimeter_name` output of cf-organization's vpc-service-controls submodule;
+    `mode`, the submodule's mode: the rules are added to the dry-run configuration, and to the enforced one too when `enforced`.
+  EOT
   type = object({
     perimeter_name = string
     mode           = optional(string, "dry_run")
