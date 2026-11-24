@@ -188,7 +188,7 @@ variable "api_keys_secrets" {
   }
 
   validation {
-    condition     = alltrue([for secret in values(var.api_keys_secrets) : can(base64decode(secret.encrypted_secret_data)) && secret.encrypted_secret_data_version >= 1])
+    condition     = alltrue([for secret in values(var.api_keys_secrets) : can(regex("^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$", secret.encrypted_secret_data)) && length(secret.encrypted_secret_data) > 0 && secret.encrypted_secret_data_version >= 1])
     error_message = "The encrypted_secret_data must be base64-encoded and the encrypted_secret_data_version at least 1."
   }
 
