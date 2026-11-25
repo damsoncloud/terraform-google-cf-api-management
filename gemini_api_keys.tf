@@ -14,6 +14,7 @@ locals {
 }
 
 resource "google_apikeys_key" "gemini_api" {
+  provider = google.api_keys
   for_each = local.gemini_api_keys
 
   project               = google_project_service.api_management["apikeys.googleapis.com"].project
@@ -34,6 +35,8 @@ resource "google_apikeys_key" "gemini_api" {
       }
     }
   }
+
+  depends_on = [google_project_iam_member.api_keys_billing]
 }
 
 # Tagged with the key's environment, so that only the development keys are readable by the API keys manager

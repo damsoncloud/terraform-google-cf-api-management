@@ -14,6 +14,15 @@ resource "google_project_iam_member" "tf_plan" {
   member  = "serviceAccount:${var.tf_plan_email}"
 }
 
+# The API Keys API is billed to the hub project, where it is enabled and allowed, instead of the Terraform service accounts' own project
+resource "google_project_iam_member" "api_keys_billing" {
+  for_each = { tf_bootstrap = var.tf_bootstrap_email, tf_plan = var.tf_plan_email }
+
+  project = google_project_service.api_management["apikeys.googleapis.com"].project
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = "serviceAccount:${each.value}"
+}
+
 data "google_project" "api_management" {
   project_id = var.api_management_project_id
 }

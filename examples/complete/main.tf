@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    google = {
+      source = "hashicorp/google"
+    }
+  }
+}
+
 module "hierarchy" {
   source  = "damsoncloud/cf-hierarchy/google"
   version = "0.2.0"
@@ -50,8 +58,22 @@ module "vpc_service_controls" {
   groups = module.organization.perimeter_groups
 }
 
+provider "google" {}
+
+# Bills the API Keys API to the hub project
+provider "google" {
+  alias                 = "api_keys"
+  user_project_override = true
+  billing_project       = module.organization.api_management_project_id
+}
+
 module "api_management" {
   source = "../.."
+
+  providers = {
+    google          = google
+    google.api_keys = google.api_keys
+  }
 
   domain                    = var.domain
   folders                   = module.hierarchy.folders
