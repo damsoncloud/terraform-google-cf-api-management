@@ -15,10 +15,27 @@ Terraform module of the Damson Cloud GCP Cloud Foundations managing the API keys
 
 ## Usage
 
+> [!IMPORTANT]
+> The module requires the `google.api_keys` provider alias, passed in its `providers` argument together with the default `google` provider, as below. Configure the alias with
+> `user_project_override = true` and the hub project as `billing_project`, otherwise creating the API keys fails with `SERVICE_DISABLED` for `apikeys.googleapis.com` in the calling
+> identity's project. See [Billing the API Keys API](#billing-the-api-keys-api).
+
 ```hcl
+# Bills the API Keys API to the hub project
+provider "google" {
+  alias                 = "api_keys"
+  user_project_override = true
+  billing_project       = module.organization.api_management_project_id
+}
+
 module "api_management" {
   source  = "damsoncloud/cf-api-management/google"
   version = "X.Y.Z"
+
+  providers = {
+    google          = google
+    google.api_keys = google.api_keys
+  }
 
   domain                    = "example.com"
   folders                   = module.hierarchy.folders
@@ -56,6 +73,13 @@ Pin an exact version. New versions are published as immutable GitHub releases wi
 
 See [`examples/basic`](examples/basic) for a Gemini API key with the hub created by cf-hierarchy, cf-bootstrap and cf-organization, and
 [`examples/complete`](examples/complete) for server-restricted keys, the other API keys' secrets, accessor service accounts and the perimeter's ingress rules.
+
+### Billing the API Keys API
+
+The API Keys API is billed to the calling identity's own project, e.g. the bootstrap project of `tf-bootstrap` and `tf-plan`, unless a billing project is set. The module
+therefore creates the API keys, and reads their key strings, with the `google.api_keys` provider, which the caller configures to bill the hub project, where the API is enabled
+and allowed by the organisation policies. The module grants `tf-bootstrap` and `tf-plan` `roles/serviceusage.serviceUsageConsumer` on the hub project, which billing it requires.
+The billing project must be known when planning, e.g. read from the cf-organization state.
 
 ### Encrypting the API keys' values
 

@@ -18,6 +18,11 @@ mock_provider "google" {
   }
 }
 
+# Bills the API Keys API to the hub project; only the API keys use it
+mock_provider "google" {
+  alias = "api_keys"
+}
+
 override_resource {
   target = google_service_account.api_manager
   values = {
@@ -152,6 +157,16 @@ run "gemini_api_keys" {
     )
     error_message = "The keys must keep the legacy names, be restricted to the Gemini API and bound to their environment's service account."
   }
+  assert {
+    condition = (
+      google_project_iam_member.api_keys_billing["tf_bootstrap"].role == "roles/serviceusage.serviceUsageConsumer" &&
+      google_project_iam_member.api_keys_billing["tf_bootstrap"].member == "serviceAccount:${var.tf_bootstrap_email}" &&
+      google_project_iam_member.api_keys_billing["tf_plan"].member == "serviceAccount:${var.tf_plan_email}" &&
+      google_project_iam_member.api_keys_billing["tf_plan"].project == var.api_management_project_id
+    )
+    error_message = "The Terraform service accounts must be able to bill the API Keys API to the hub project."
+  }
+
 
   assert {
     condition = (
